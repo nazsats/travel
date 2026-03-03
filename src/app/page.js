@@ -4,117 +4,147 @@ import { useState, useEffect, useRef } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, orderBy, query, deleteDoc, doc } from 'firebase/firestore';
 import {
-  Plane, MapPin, Camera, Plus, Star, Sunset, ChevronRight,
+  Plane, MapPin, Camera, Plus, Star, ChevronRight,
   Image as ImageIcon, Trash2, Globe, BookOpen, Sparkles, Clock,
   Mountain, Compass, Calendar, Layers
 } from 'lucide-react';
 import AddMemoryForm from '@/components/AddMemoryForm';
 import { GooglePhotosUploader } from '@/components/GooglePhotosUploader';
+import { GooglePhotosGallery } from '@/components/GooglePhotosGallery';
 
-// ── Emoji category icons ───────────────────────────────
-const moodEmoji = { 'Amazing': '🤩', 'Peaceful': '😌', 'Adventurous': '🏔️', 'Cultural': '🏛️', 'Foodie': '🍜', 'Party': '🎉', 'Chill': '🌊' };
-const categoryColors = {
-  'Sightseeing': '#4f46e5', 'Nature': '#059669', 'Food & Drink': '#d97706',
-  'Culture': '#7c3aed', 'Adventure': '#dc2626', 'Shopping': '#db2777',
-  'Nightlife': '#0891b2', 'Transport': '#6b7280',
+// ── Emoji / colour maps ────────────────────────────────────
+const moodEmoji = {
+  'Amazing': '🤩', 'Peaceful': '😌', 'Adventurous': '🏔️',
+  'Cultural': '🏛️', 'Foodie': '🍜', 'Party': '🎉', 'Chill': '🌊'
 };
 
-function StatCard({ icon, value, label, color }) {
+const categoryConfig = {
+  'Sightseeing': { color: '#5c8aff', bg: 'rgba(92,138,255,0.12)', emoji: '🗺️' },
+  'Nature': { color: '#4caf50', bg: 'rgba(76,175,80,0.12)', emoji: '🌿' },
+  'Food & Drink': { color: '#ff7043', bg: 'rgba(255,112,67,0.12)', emoji: '🍜' },
+  'Culture': { color: '#b388ff', bg: 'rgba(179,136,255,0.12)', emoji: '🎭' },
+  'Adventure': { color: '#ff5252', bg: 'rgba(255,82,82,0.12)', emoji: '⛰️' },
+  'Shopping': { color: '#ff80ab', bg: 'rgba(255,128,171,0.12)', emoji: '🛍️' },
+  'Nightlife': { color: '#80deea', bg: 'rgba(128,222,234,0.12)', emoji: '🌙' },
+  'Transport': { color: '#90a4ae', bg: 'rgba(144,164,174,0.12)', emoji: '✈️' },
+};
+
+// Dark stat card colours
+const NOTE_COLORS = ['rgba(212,160,23,0.1)', 'rgba(76,175,80,0.1)', 'rgba(92,138,255,0.1)', 'rgba(255,128,171,0.1)'];
+const NOTE_BORDERS = ['#d4a017', '#4caf50', '#5c8aff', '#ff80ab'];
+const NOTE_ROTATE = ['-1.5deg', '1deg', '-0.8deg', '1.2deg'];
+
+// ── Doodle decorations ─────────────────────────────────────
+const DoodleUnderline = () => (
+  <svg width="200" height="12" viewBox="0 0 200 12" fill="none" xmlns="http://www.w3.org/2000/svg"
+    style={{ display: 'block', margin: '0 auto' }}>
+    <path d="M4 8 Q50 2 100 8 Q150 14 196 6"
+      stroke="#d4a017" strokeWidth="3" strokeLinecap="round" fill="none" />
+  </svg>
+);
+
+// ── Stat Card ──────────────────────────────────────────────
+function StatCard({ icon, value, label, colorIdx }) {
+  const bg = NOTE_COLORS[colorIdx % 4];
+  const border = NOTE_BORDERS[colorIdx % 4];
+  const rotate = NOTE_ROTATE[colorIdx % 4];
   return (
-    <div className="glass card-3d" style={{
+    <div className="card-3d" style={{
       padding: '24px 16px', textAlign: 'center',
-      borderRadius: '20px', cursor: 'default',
+      background: bg,
+      border: `2px solid ${border}`,
+      borderRadius: '16px',
+      boxShadow: `0 4px 20px rgba(0,0,0,0.3), 0 0 15px ${border}33`,
+      cursor: 'default',
+      transform: `rotate(${rotate})`,
+      position: 'relative',
     }}>
+      <div style={{ fontSize: '2.4rem', marginBottom: '8px' }}>{icon}</div>
       <div style={{
-        width: '46px', height: '46px', borderRadius: '14px',
-        background: `${color}20`, border: `1px solid ${color}35`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color, margin: '0 auto 14px',
-      }}>
-        {icon}
-      </div>
-      <div style={{
-        fontFamily: 'Space Grotesk', fontSize: '2rem', fontWeight: 700, lineHeight: 1,
-        background: 'linear-gradient(180deg,#eeeeff,#7070a0)',
-        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '6px',
+        fontFamily: 'Caveat, cursive', fontSize: '2.6rem', fontWeight: 700,
+        color: '#f0e6d0', lineHeight: 1, marginBottom: '4px',
       }}>{value}</div>
-      <div style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-        {label}
-      </div>
+      <div style={{
+        fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.88rem',
+        color: '#b8a88a', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+      }}>{label}</div>
+      {/* Pin decoration */}
+      <div style={{
+        position: 'absolute', top: '-8px', left: '50%', transform: 'translateX(-50%)',
+        width: '14px', height: '14px', borderRadius: '50%',
+        background: border, border: `2px solid ${border}`,
+        boxShadow: `0 0 8px ${border}66`,
+      }} />
     </div>
   );
 }
 
+// ── Memory Card ────────────────────────────────────────────
 function MemoryCard({ memory, hovered, onHover, onUnhover, onDelete, deletingId, index }) {
-  const cardRef = useRef(null);
   const cat = memory.category || 'Sightseeing';
-  const catColor = categoryColors[cat] || '#4f46e5';
+  const cfg = categoryConfig[cat] || categoryConfig['Sightseeing'];
   const mood = memory.mood;
-
-  const handleMouseMove = (e) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    cardRef.current.style.transform = `perspective(900px) rotateX(${-y * 6}deg) rotateY(${x * 6}deg) translateY(-4px)`;
-    cardRef.current.style.boxShadow = `0 24px 60px rgba(0,0,0,0.65), 0 0 40px ${catColor}20`;
-  };
-  const handleMouseLeave = () => {
-    if (cardRef.current) {
-      cardRef.current.style.transform = '';
-      cardRef.current.style.boxShadow = '';
-    }
-    onUnhover();
-  };
 
   return (
     <div
-      style={{ paddingLeft: '48px', position: 'relative', animationDelay: `${index * 0.07}s` }}
+      style={{ paddingLeft: '52px', position: 'relative', animationDelay: `${index * 0.07}s` }}
       className="anim-fade-up"
       onMouseEnter={onHover}
-      onMouseLeave={handleMouseLeave}
+      onMouseLeave={onUnhover}
     >
-      {/* Timeline node */}
-      <div style={{ position: 'absolute', left: '8px', top: '28px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-        {hovered && <div style={{ position: 'absolute', width: '24px', height: '24px', borderRadius: '50%', background: `${catColor}55`, animation: 'pulse-ring 1s ease-out infinite' }} />}
-        <div style={{
-          width: '14px', height: '14px', borderRadius: '50%',
-          border: `2px solid ${hovered ? catColor : `${catColor}70`}`,
-          background: hovered ? catColor : 'var(--bg)',
-          transition: 'all 0.25s',
-          boxShadow: hovered ? `0 0 14px ${catColor}90` : 'none',
-        }} />
+      {/* Timeline emoji node */}
+      <div style={{
+        position: 'absolute', left: '4px', top: '24px',
+        width: '32px', height: '32px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '1.3rem', zIndex: 10,
+        background: cfg.bg,
+        border: `2px solid ${cfg.color}`,
+        borderRadius: '50%',
+        boxShadow: hovered ? `0 0 12px ${cfg.color}55` : `0 0 6px ${cfg.color}33`,
+        transition: 'box-shadow 0.2s, transform 0.2s',
+        transform: hovered ? 'scale(1.15)' : 'scale(1)',
+      }}>
+        {cfg.emoji}
       </div>
 
       {/* Card */}
       <div
-        ref={cardRef}
-        className="glass"
-        onMouseMove={handleMouseMove}
         style={{
-          padding: '0', borderRadius: '20px', overflow: 'hidden',
-          transition: 'transform 0.35s var(--spring), box-shadow 0.35s', transformStyle: 'preserve-3d',
+          background: '#13131c',
+          border: `2px solid ${hovered ? '#d4a017' : '#2a2a38'}`,
+          borderRadius: '18px',
+          overflow: 'hidden',
+          transition: 'transform 0.25s var(--spring), box-shadow 0.25s, border-color 0.25s',
+          boxShadow: hovered ? '0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(212,160,23,0.15)' : '0 4px 16px rgba(0,0,0,0.3)',
+          transform: hovered ? 'translate(-2px, -3px)' : 'translate(0,0)',
         }}
       >
-        {/* Color accent stripe */}
-        <div style={{ height: '3px', background: `linear-gradient(90deg, ${catColor}, ${catColor}00)` }} />
+        {/* Coloured left border accent */}
+        <div style={{
+          height: '100%', width: '4px',
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          background: `linear-gradient(to bottom, ${cfg.color}, ${cfg.color}88)`,
+          borderRadius: '16px 0 0 16px',
+        }} />
 
-        <div style={{ padding: '22px 24px', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {/* Left: content */}
+        <div style={{ padding: '20px 22px 20px 26px', display: 'flex', gap: '18px', flexWrap: 'wrap', position: 'relative' }}>
+          {/* Content */}
           <div style={{ flex: '1 1 220px', minWidth: 0 }}>
-            {/* Top row */}
+            {/* Header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '10px', flexWrap: 'wrap' }}>
-              <h3 style={{ fontFamily: 'Space Grotesk', fontSize: '1.15rem', fontWeight: 700, color: '#eeeeff', lineHeight: 1.2 }}>
+              <h3 style={{ fontFamily: 'Caveat, cursive', fontSize: '1.4rem', fontWeight: 700, color: '#f0e6d0', lineHeight: 1.2 }}>
                 {mood && <span style={{ marginRight: '6px' }}>{moodEmoji[mood] || ''}</span>}
                 {memory.title}
               </h3>
-              <span className="badge badge-violet" style={{ flexShrink: 0 }}>
-                <Calendar size={9} /> {memory.date ? new Date(memory.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
+              <span className="badge badge-yellow" style={{ flexShrink: 0, fontSize: '0.85rem' }}>
+                <Calendar size={10} />
+                {memory.date ? new Date(memory.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
               </span>
             </div>
 
-            {/* Meta tags row */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+            {/* Meta tags */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', marginBottom: '12px' }}>
               {memory.location && (
                 <span className="tag"><MapPin size={10} /> {memory.location}</span>
               )}
@@ -122,12 +152,12 @@ function MemoryCard({ memory, hovered, onHover, onUnhover, onDelete, deletingId,
                 <span className="tag"><Globe size={10} /> {memory.country}</span>
               )}
               {memory.category && (
-                <span className="tag" style={{ color: catColor, borderColor: `${catColor}30`, background: `${catColor}10` }}>
-                  {memory.category}
+                <span className="tag" style={{ color: cfg.color, borderColor: cfg.color, background: cfg.bg }}>
+                  {cfg.emoji} {memory.category}
                 </span>
               )}
               {memory.rating && (
-                <span className="tag" style={{ color: '#fbbf24' }}>
+                <span className="tag" style={{ color: '#d4a017', borderColor: '#d4a017', background: 'rgba(212,160,23,0.12)' }}>
                   {'★'.repeat(memory.rating)}{'☆'.repeat(5 - memory.rating)}
                 </span>
               )}
@@ -136,71 +166,92 @@ function MemoryCard({ memory, hovered, onHover, onUnhover, onDelete, deletingId,
             {/* Description */}
             {memory.description && (
               <p style={{
-                color: 'var(--text-2)', fontSize: '0.87rem', lineHeight: 1.75,
-                marginBottom: '14px',
-                borderLeft: `2px solid ${catColor}50`,
+                fontFamily: 'Patrick Hand, sans-serif', color: '#b8a88a',
+                fontSize: '0.97rem', lineHeight: 1.7, marginBottom: '12px',
+                borderLeft: `3px solid ${cfg.color}`,
                 paddingLeft: '12px',
+                borderRadius: '2px',
               }}>
                 {memory.description}
               </p>
             )}
 
-            {/* Notes */}
-            {memory.notes && (
+            {/* AI Enhanced Content */}
+            {memory.aiEnhanced && (
               <div style={{
-                padding: '10px 14px', borderRadius: '12px', marginBottom: '14px',
-                background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)',
+                padding: '10px 14px', borderRadius: '10px', marginBottom: '12px',
+                background: 'rgba(212,160,23,0.08)', border: '1.5px solid rgba(212,160,23,0.25)',
               }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-2)', lineHeight: 1.65 }}>
-                  <BookOpen size={11} style={{ display: 'inline', marginRight: '5px', opacity: 0.6 }} />
-                  {memory.notes}
+                <p style={{ fontSize: '0.85rem', fontFamily: 'Patrick Hand, sans-serif', color: '#d4a017', lineHeight: 1.65 }}>
+                  ✨ {memory.aiEnhanced}
                 </p>
               </div>
             )}
 
-            {/* Budget / Transport */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-              {memory.transport && <span className="tag"><Compass size={10} /> {memory.transport}</span>}
+            {/* Notes */}
+            {memory.notes && (
+              <div style={{
+                padding: '10px 14px', borderRadius: '10px', marginBottom: '12px',
+                background: 'rgba(179,136,255,0.08)', border: '1.5px solid rgba(179,136,255,0.2)',
+              }}>
+                <p style={{ fontSize: '0.88rem', fontFamily: 'Patrick Hand, sans-serif', color: '#b388ff', lineHeight: 1.65 }}>
+                  📝 {memory.notes}
+                </p>
+              </div>
+            )}
+
+            {/* Budget / Transport / Weather */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', marginBottom: '12px' }}>
+              {memory.transport && <span className="tag">✈️ {memory.transport}</span>}
               {memory.budget && <span className="tag">💰 {memory.budget}</span>}
               {memory.weather && <span className="tag">🌤 {memory.weather}</span>}
+              {memory.companions && <span className="tag">👥 {memory.companions}</span>}
             </div>
 
             {/* Footer */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid #2a2a38' }}>
+              <span style={{ fontSize: '0.78rem', fontFamily: 'Patrick Hand, sans-serif', color: '#7a6f5a' }}>
                 <Clock size={10} style={{ display: 'inline', marginRight: '4px' }} />
                 {memory.date ? new Date(memory.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : ''}
               </span>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(memory.id); }}
                   disabled={deletingId === memory.id}
                   style={{
-                    background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px',
-                    color: hovered ? '#f87171' : 'var(--text-3)',
-                    transition: 'color 0.2s', opacity: deletingId === memory.id ? 0.4 : 1,
+                    background: hovered ? 'rgba(255,82,82,0.1)' : 'transparent',
+                    border: hovered ? '1.5px solid #ff5252' : '1.5px solid transparent',
+                    borderRadius: '8px',
+                    cursor: 'pointer', padding: '4px 8px',
+                    color: hovered ? '#ff5252' : '#7a6f5a',
+                    transition: 'all 0.2s',
+                    opacity: deletingId === memory.id ? 0.4 : 1,
                   }}
                 ><Trash2 size={13} /></button>
                 <button style={{
-                  background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px',
-                  color: hovered ? '#a5b4fc' : 'var(--text-3)',
-                  fontSize: '0.76rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px', transition: 'color 0.2s',
-                  fontFamily: 'Space Grotesk',
+                  background: hovered ? 'rgba(212,160,23,0.12)' : 'transparent',
+                  border: hovered ? '1.5px solid #d4a017' : '1.5px solid transparent',
+                  borderRadius: '8px',
+                  cursor: 'pointer', padding: '4px 8px',
+                  color: hovered ? '#d4a017' : '#7a6f5a',
+                  fontSize: '0.82rem', fontWeight: 700,
+                  fontFamily: 'Caveat, cursive',
+                  display: 'flex', alignItems: 'center', gap: '3px',
+                  transition: 'all 0.2s',
                 }}>Details <ChevronRight size={11} /></button>
               </div>
             </div>
           </div>
 
-          {/* Right: photo */}
+          {/* Photo slot */}
           <div style={{
-            width: '130px', flexShrink: 0, borderRadius: '14px', overflow: 'hidden',
-            background: `linear-gradient(135deg, ${catColor}15, ${catColor}05)`,
-            border: '1px solid rgba(255,255,255,0.05)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '120px',
+            width: '110px', flexShrink: 0, borderRadius: '14px', overflow: 'hidden',
+            background: cfg.bg, border: `1.5px dashed ${cfg.color}44`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '110px',
           }}>
-            <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.15)' }}>
-              <ImageIcon size={26} />
-              <div style={{ fontSize: '0.6rem', marginTop: '6px', fontWeight: 500 }}>No photo</div>
+            <div style={{ textAlign: 'center', color: '#7a6f5a' }}>
+              <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>📷</div>
+              <div style={{ fontSize: '0.65rem', fontFamily: 'Caveat, cursive', fontWeight: 600 }}>No photo</div>
             </div>
           </div>
         </div>
@@ -209,6 +260,7 @@ function MemoryCard({ memory, hovered, onHover, onUnhover, onDelete, deletingId,
   );
 }
 
+// ── Main Page ──────────────────────────────────────────────
 export default function Home() {
   const [showForm, setShowForm] = useState(false);
   const [memories, setMemories] = useState([]);
@@ -235,7 +287,7 @@ export default function Home() {
   };
 
   const countries = [...new Set(memories.map(m => m.country).filter(Boolean))];
-  const categories = ['All', ...Object.keys(categoryColors)];
+  const categories = ['All', ...Object.keys(categoryConfig)];
   const filtered = filterCat === 'All' ? memories : memories.filter(m => m.category === filterCat);
 
   const totalDays = memories.length
@@ -244,38 +296,47 @@ export default function Home() {
       if (dates.length < 2) return 1;
       const diff = Math.max(...dates) - Math.min(...dates);
       return Math.max(1, Math.ceil(diff / 86400000) + 1);
-    })() : 0;
+    })()
+    : 0;
 
   return (
     <>
-      {/* ── Navbar ────────────────────────────────────── */}
+      {/* ── Navbar ─────────────────────────────────────── */}
       <nav style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-        background: 'rgba(4,4,13,0.82)', backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid var(--border)',
+        background: 'rgba(10, 10, 15, 0.85)',
+        backdropFilter: 'blur(16px) saturate(180%)',
+        borderBottom: '1px solid rgba(212, 160, 23, 0.2)',
+        boxShadow: '0 2px 20px rgba(0,0,0,0.4)',
       }}>
-        <div className="site-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '64px' }}>
+        <div className="site-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '66px' }}>
+          {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="anim-float" style={{
-              width: '36px', height: '36px', borderRadius: '11px',
-              background: 'var(--grad)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 18px rgba(79,70,229,0.5)',
+              width: '40px', height: '40px', borderRadius: '12px',
+              background: 'linear-gradient(135deg, rgba(212,160,23,0.2), rgba(212,160,23,0.05))',
+              border: '2px solid #d4a017',
+              boxShadow: '0 0 15px rgba(212,160,23,0.2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.4rem',
             }}>
-              <Globe size={18} color="white" />
+              🧭
             </div>
             <div>
-              <div style={{ fontFamily: 'Space Grotesk', fontWeight: 700, fontSize: '1rem', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+              <div style={{ fontFamily: 'Caveat, cursive', fontWeight: 700, fontSize: '1.35rem', lineHeight: 1.1, color: '#f0e6d0' }}>
                 Travel <span className="g-text">Memories</span>
               </div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Your Journey Journal
+              <div style={{ fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.68rem', color: '#7a6f5a', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                ✏️ Your Journey Journal
               </div>
             </div>
           </div>
+
+          {/* Nav right */}
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span className="badge badge-red" style={{ display: 'flex', alignItems: 'center' }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#ef4444', animation: 'pulse-dot 2s infinite', display: 'inline-block' }} />
-              &nbsp;Live
+            <span className="badge badge-gold" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#d4a017', animation: 'pulse-dot 2s infinite', display: 'inline-block' }} />
+              Live
             </span>
             <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>
               <Plus size={14} /> Add Memory
@@ -285,71 +346,100 @@ export default function Home() {
       </nav>
 
       {/* ── Page ──────────────────────────────────────── */}
-      <div className="site-wrap anim-fade-up" style={{ paddingTop: '88px', paddingBottom: '80px' }}>
+      <div className="site-wrap anim-fade-up" style={{ paddingTop: '90px', paddingBottom: '80px', margin: '0 auto', width: '100%' }}>
 
-        {/* ── HERO ────────────────────────────────────── */}
-        <header style={{ textAlign: 'center', marginBottom: '64px', padding: '48px 0 0' }}>
-          <span className="badge badge-violet" style={{ marginBottom: '20px' }}>
-            <Sparkles size={11} /> Personal Travel Journal
+        {/* ── HERO ──────────────────────────────────── */}
+        <header style={{ textAlign: 'center', marginBottom: '64px', padding: '48px 0 0', position: 'relative' }}>
+
+          {/* Floating decorations */}
+          <div style={{ position: 'absolute', top: '20px', left: '10%', fontSize: '2rem', animation: 'float 5s ease-in-out infinite', animationDelay: '0s', opacity: 0.5 }}>✈️</div>
+          <div style={{ position: 'absolute', top: '60px', right: '8%', fontSize: '1.6rem', animation: 'float 4s ease-in-out infinite', animationDelay: '0.5s', opacity: 0.5 }}>🗺️</div>
+          <div style={{ position: 'absolute', top: '10px', right: '20%', fontSize: '1.4rem', animation: 'float 6s ease-in-out infinite', animationDelay: '1s', opacity: 0.4 }}>📸</div>
+          <div style={{ position: 'absolute', top: '80px', left: '18%', fontSize: '1.2rem', animation: 'float 5.5s ease-in-out infinite', animationDelay: '0.8s', opacity: 0.4 }}>🌍</div>
+
+          <span className="badge badge-violet" style={{ marginBottom: '20px', fontSize: '1rem' }}>
+            ✈️ Personal Travel Journal
           </span>
-          <h1 style={{ fontSize: 'clamp(2.6rem,6vw,5.2rem)', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1.04, marginBottom: '18px' }}>
+
+          <h1 style={{
+            fontFamily: 'Caveat, cursive',
+            fontSize: 'clamp(3rem, 8vw, 6rem)',
+            fontWeight: 700, lineHeight: 1.05,
+            marginBottom: '8px', color: '#f0e6d0',
+          }}>
             Every Journey.<br />
             <span className="g-text">Every Memory.</span>
           </h1>
-          <p style={{ color: 'var(--text-2)', fontSize: 'clamp(0.95rem,2vw,1.1rem)', maxWidth: '460px', margin: '0 auto 48px', lineHeight: 1.75 }}>
-            Capture your adventures around the world — the people, places, and moments that made them special.
+          <DoodleUnderline />
+
+          <p style={{
+            fontFamily: 'Patrick Hand, sans-serif',
+            color: '#b8a88a', fontSize: 'clamp(1rem, 2vw, 1.15rem)',
+            maxWidth: '440px', margin: '18px auto 44px', lineHeight: 1.8,
+          }}>
+            Capture your adventures around the world — the people, places, and moments that made them special. ✨
           </p>
 
-          {/* 3D rotating globe orb */}
+          {/* Doodle globe */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '48px' }}>
-            <div style={{
+            <div className="anim-float" style={{
               width: '120px', height: '120px', borderRadius: '50%',
-              background: 'radial-gradient(circle at 35% 35%, rgba(124,58,237,0.6), rgba(79,70,229,0.3) 50%, rgba(37,99,235,0.15))',
-              border: '1px solid rgba(124,58,237,0.3)',
-              boxShadow: '0 0 60px rgba(79,70,229,0.4), inset 0 0 40px rgba(124,58,237,0.2)',
+              background: 'radial-gradient(circle at 30% 30%, rgba(92,138,255,0.15), rgba(212,160,23,0.1))',
+              border: '2px solid #d4a017',
+              boxShadow: '0 0 30px rgba(212,160,23,0.15), 0 0 60px rgba(92,138,255,0.08)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              animation: 'float 5s ease-in-out infinite',
+              fontSize: '3.5rem',
+              position: 'relative',
             }}>
-              <Globe size={44} color="rgba(200,200,255,0.7)" />
+              🌍
+              <div style={{
+                position: 'absolute', inset: '-12px',
+                borderRadius: '50%', border: '1px dashed rgba(212,160,23,0.3)', opacity: 0.6,
+              }} />
             </div>
           </div>
 
-          {/* Stats */}
+          {/* Stat cards */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))',
-            gap: '14px', maxWidth: '700px', margin: '0 auto',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '20px', maxWidth: '680px', margin: '0 auto',
           }}>
-            <StatCard icon={<Camera size={20} />} value={memories.length} label="Memories" color="#4f46e5" />
-            <StatCard icon={<Globe size={20} />} value={countries.length || 0} label="Countries" color="#7c3aed" />
-            <StatCard icon={<MapPin size={20} />} value={new Set(memories.map(m => m.location).filter(Boolean)).size} label="Places" color="#2563eb" />
-            <StatCard icon={<Calendar size={20} />} value={totalDays} label="Days" color="#0d9488" />
+            <StatCard icon="📸" value={memories.length} label="Memories" colorIdx={0} />
+            <StatCard icon="🌍" value={countries.length || 0} label="Countries" colorIdx={1} />
+            <StatCard icon="📍" value={new Set(memories.map(m => m.location).filter(Boolean)).size} label="Places" colorIdx={2} />
+            <StatCard icon="📅" value={totalDays} label="Days" colorIdx={3} />
           </div>
         </header>
 
-        {/* ── Google Photos Sync ───────────────────────── */}
-        <section className="glass" style={{ marginBottom: '56px', overflow: 'hidden', borderRadius: '24px' }}>
+        {/* ── Google Photos Sync ──────────────────────── */}
+        <section style={{
+          marginBottom: '0px', overflow: 'hidden',
+          background: '#13131c',
+          border: '2px solid rgba(212,160,23,0.2)',
+          borderRadius: '24px 24px 0 0',
+          boxShadow: 'none',
+          borderBottom: '1px solid #2a2a38',
+        }}>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             <div style={{
               flex: '1 1 260px', padding: '32px',
-              borderRight: '1px solid var(--border)',
+              borderRight: '1px solid #2a2a38',
               display: 'flex', flexDirection: 'column', gap: '14px', justifyContent: 'center',
             }}>
-              <div style={{
-                width: '46px', height: '46px', borderRadius: '14px',
-                background: 'rgba(37,99,235,0.15)', border: '1px solid rgba(37,99,235,0.3)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60a5fa',
-              }}>
-                <ImageIcon size={22} />
-              </div>
+              <div style={{ fontSize: '2.5rem' }}>📷</div>
               <div>
-                <h3 style={{ fontFamily: 'Space Grotesk', fontSize: '1.1rem', fontWeight: 700, marginBottom: '8px' }}>Google Photos Sync</h3>
-                <p style={{ color: 'var(--text-2)', fontSize: '0.84rem', lineHeight: 1.7 }}>
+                <h3 style={{ fontFamily: 'Caveat, cursive', fontSize: '1.5rem', fontWeight: 700, marginBottom: '8px', color: '#f0e6d0' }}>
+                  Google Photos Sync
+                </h3>
+                <p style={{ fontFamily: 'Patrick Hand, sans-serif', color: '#b8a88a', fontSize: '0.95rem', lineHeight: 1.7 }}>
                   Upload your travel photos to organised albums in Google Photos — great for keeping each trip neatly sorted.
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {['Albums', 'Organised', 'Instant'].map(t => <span key={t} className="badge badge-blue">{t}</span>)}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {['📁 Albums', '✅ Organised', '⚡ Instant'].map(t => (
+                  <span key={t} className="badge badge-gold" style={{ fontSize: '0.88rem' }}>{t}</span>
+                ))}
               </div>
             </div>
             <div style={{ flex: '1 1 260px', padding: '32px' }}>
@@ -358,19 +448,34 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Timeline ────────────────────────────────── */}
+        {/* ── Google Photos Gallery ───────────────────── */}
+        <section style={{
+          marginBottom: '56px',
+          background: '#13131c',
+          border: '2px solid rgba(212,160,23,0.2)',
+          borderRadius: '0 0 24px 24px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3), 0 0 20px rgba(212,160,23,0.05)',
+          padding: '32px',
+          borderTop: 'none',
+        }}>
+          <GooglePhotosGallery albumTitle="My Travel Photos" />
+        </section>
+
+        {/* ── Timeline ──────────────────────────────── */}
         <section>
-          {/* Header + filter */}
+          {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
             <div>
-              <h2 style={{ fontFamily: 'Space Grotesk', fontSize: '1.7rem', fontWeight: 700 }}>Timeline</h2>
-              <p style={{ color: 'var(--text-3)', fontSize: '0.78rem', marginTop: '3px' }}>
+              <h2 style={{ fontFamily: 'Caveat, cursive', fontSize: '2.2rem', fontWeight: 700, color: '#f0e6d0' }}>
+                🗺️ Journey Timeline
+              </h2>
+              <p style={{ fontFamily: 'Patrick Hand, sans-serif', color: '#7a6f5a', fontSize: '0.88rem', marginTop: '2px' }}>
                 {filtered.length} {filtered.length === 1 ? 'memory' : 'memories'} {filterCat !== 'All' ? `in ${filterCat}` : 'total'}
               </p>
             </div>
             <div className="divider" />
             <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)} style={{ flexShrink: 0 }}>
-              <Plus size={13} /> New
+              <Plus size={13} /> New ✏️
             </button>
           </div>
 
@@ -379,20 +484,25 @@ export default function Home() {
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '32px' }}>
               {categories.map(cat => {
                 const active = filterCat === cat;
-                const col = categoryColors[cat] || '#4f46e5';
+                const cfg = categoryConfig[cat];
                 return (
                   <button
                     key={cat}
                     onClick={() => setFilterCat(cat)}
                     style={{
-                      padding: '6px 14px', borderRadius: '999px', border: '1px solid',
-                      borderColor: active ? (cat === 'All' ? 'rgba(79,70,229,0.6)' : `${col}60`) : 'var(--border)',
-                      background: active ? (cat === 'All' ? 'rgba(79,70,229,0.18)' : `${col}18`) : 'transparent',
-                      color: active ? (cat === 'All' ? '#a5b4fc' : col) : 'var(--text-3)',
-                      fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-                      fontFamily: 'Space Grotesk', transition: 'all 0.2s',
+                      padding: '6px 16px', borderRadius: '999px',
+                      border: `2px solid ${active ? (cfg ? cfg.color : '#d4a017') : '#2a2a38'}`,
+                      background: active ? (cfg ? cfg.bg : 'rgba(212,160,23,0.12)') : '#13131c',
+                      color: active ? (cfg ? cfg.color : '#d4a017') : '#b8a88a',
+                      fontSize: '0.92rem', fontWeight: 700, cursor: 'pointer',
+                      fontFamily: 'Caveat, cursive',
+                      boxShadow: active ? `0 0 12px ${cfg ? cfg.color : '#d4a017'}33` : 'none',
+                      transition: 'all 0.18s var(--spring)',
+                      transform: active ? 'translate(-1px, -1px)' : 'none',
                     }}
-                  >{cat}</button>
+                  >
+                    {cfg ? `${cfg.emoji} ` : ''}{cat}
+                  </button>
                 );
               })}
             </div>
@@ -401,29 +511,31 @@ export default function Home() {
           {/* Loading */}
           {loading && (
             <div style={{ textAlign: 'center', padding: '80px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-              <div style={{ width: '44px', height: '44px', borderRadius: '50%', border: '3px solid rgba(79,70,229,0.15)', borderTopColor: 'var(--indigo)' }} className="anim-spin" />
-              <p style={{ color: 'var(--text-3)', fontSize: '0.84rem' }}>Loading your memories...</p>
+              <div style={{ fontSize: '3rem', animation: 'spin 1.5s linear infinite' }}>✈️</div>
+              <p style={{ fontFamily: 'Caveat, cursive', fontSize: '1.3rem', color: '#b8a88a' }}>
+                Loading your memories...
+              </p>
             </div>
           )}
 
-          {/* Empty */}
+          {/* Empty state */}
           {!loading && memories.length === 0 && (
-            <div className="glass" style={{ textAlign: 'center', padding: '72px 32px', borderRadius: '24px' }}>
-              <div className="anim-float" style={{
-                width: '80px', height: '80px', borderRadius: '50%', margin: '0 auto 24px',
-                background: 'rgba(79,70,229,0.12)', border: '1px solid rgba(79,70,229,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Mountain size={36} color="#a5b4fc" />
-              </div>
-              <h3 style={{ fontFamily: 'Space Grotesk', fontSize: '1.4rem', fontWeight: 700, marginBottom: '10px' }}>
-                The adventure starts here 🌍
+            <div style={{
+              textAlign: 'center', padding: '72px 32px',
+              background: '#13131c',
+              border: '2px solid rgba(212,160,23,0.2)',
+              borderRadius: '24px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+            }}>
+              <div className="anim-float" style={{ fontSize: '5rem', marginBottom: '18px' }}>🏕️</div>
+              <h3 style={{ fontFamily: 'Caveat, cursive', fontSize: '2rem', fontWeight: 700, marginBottom: '10px', color: '#f0e6d0' }}>
+                The adventure starts here! 🌍
               </h3>
-              <p style={{ color: 'var(--text-2)', maxWidth: '320px', margin: '0 auto 28px', fontSize: '0.9rem', lineHeight: 1.7 }}>
+              <p style={{ fontFamily: 'Patrick Hand, sans-serif', color: '#b8a88a', maxWidth: '320px', margin: '0 auto 28px', fontSize: '1rem', lineHeight: 1.75 }}>
                 Start adding your travel memories — every trip, every place, every story.
               </p>
               <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                <Plus size={16} /> Log First Memory
+                <Plus size={16} /> Log First Memory ✏️
               </button>
             </div>
           )}
@@ -431,10 +543,10 @@ export default function Home() {
           {/* Memory list */}
           {!loading && filtered.length > 0 && (
             <div style={{ position: 'relative' }}>
-              {/* Timeline line */}
+              {/* Gold dashed timeline line */}
               <div style={{
-                position: 'absolute', left: '19px', top: '28px', bottom: '28px', width: '2px',
-                background: 'linear-gradient(to bottom, var(--violet), rgba(79,70,229,0.2) 85%, transparent)',
+                position: 'absolute', left: '20px', top: '40px', bottom: '40px', width: '2px',
+                background: 'repeating-linear-gradient(to bottom, rgba(212,160,23,0.3) 0px, rgba(212,160,23,0.3) 8px, transparent 8px, transparent 14px)',
                 borderRadius: '2px',
               }} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -455,26 +567,34 @@ export default function Home() {
           )}
 
           {!loading && memories.length > 0 && filtered.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-3)', fontSize: '0.88rem' }}>
-              No memories in "{filterCat}" yet. <button onClick={() => setFilterCat('All')} style={{ color: '#a5b4fc', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Show all</button>
+            <div style={{
+              textAlign: 'center', padding: '40px',
+              fontFamily: 'Caveat, cursive', color: '#7a6f5a', fontSize: '1.2rem',
+            }}>
+              No memories in "{filterCat}" yet. {' '}
+              <button onClick={() => setFilterCat('All')} style={{
+                color: '#d4a017', background: 'none', border: 'none',
+                cursor: 'pointer', fontWeight: 700, fontFamily: 'Caveat, cursive', fontSize: '1.2rem',
+                textDecoration: 'underline',
+              }}>Show all</button>
             </div>
           )}
         </section>
       </div>
 
-      {/* ── Modal ─────────────────────────────────────── */}
+      {/* ── Modal ──────────────────────────────────── */}
       {showForm && (
         <AddMemoryForm onClose={() => setShowForm(false)} onMemoryAdded={() => setShowForm(false)} />
       )}
 
       <style jsx global>{`
         @keyframes pulse-dot {
-          0%,100%{ box-shadow:0 0 0 0 rgba(239,68,68,.7); }
-          50%     { box-shadow:0 0 0 6px rgba(239,68,68,0); }
+          0%,100%{ box-shadow:0 0 0 0 rgba(212,160,23,.5); }
+          50%     { box-shadow:0 0 0 6px rgba(212,160,23,0); }
         }
         @keyframes pulse-ring {
           0%  { transform:scale(1);   opacity:0.6; }
-          100% { transform:scale(2.6); opacity:0;   }
+          100% { transform:scale(2.6); opacity:0; }
         }
       `}</style>
     </>
