@@ -45,9 +45,12 @@ export default function AddMemoryForm({ onClose, onMemoryAdded }) {
                     country: form.country,
                     category: form.category,
                     mood: form.mood,
+                    rating: form.rating,
                     description: form.description,
                     companions: form.companions,
                     highlights: form.highlights,
+                    foodTried: form.foodTried,
+                    localTips: form.localTips,
                 }),
             });
             const data = await res.json();
@@ -74,15 +77,12 @@ export default function AddMemoryForm({ onClose, onMemoryAdded }) {
                 ...form,
                 createdAt: serverTimestamp(),
             };
-            if (aiData?.enhancedDescription) {
-                saveData.aiEnhanced = aiData.enhancedDescription;
-            }
-            if (aiData?.funFacts) {
-                saveData.aiFunFacts = aiData.funFacts;
-            }
-            if (aiData?.travelTips) {
-                saveData.aiTravelTips = aiData.travelTips;
-            }
+            if (aiData?.enhancedDescription) saveData.aiEnhanced = aiData.enhancedDescription;
+            if (aiData?.funFacts) saveData.aiFunFacts = aiData.funFacts;
+            if (aiData?.travelTips) saveData.aiTravelTips = aiData.travelTips;
+            if (aiData?.moodColor) saveData.aiMoodColor = aiData.moodColor;
+            if (aiData?.travelQuote) saveData.aiTravelQuote = aiData.travelQuote;
+            if (aiData?.localCuisine) saveData.aiLocalCuisine = aiData.localCuisine;
             const docRef = await addDoc(collection(db, 'memories'), saveData);
             onMemoryAdded({ id: docRef.id, ...saveData });
         } catch (err) {
@@ -622,7 +622,36 @@ export default function AddMemoryForm({ onClose, onMemoryAdded }) {
                                                     <p style={{ fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.8rem', color: '#b8a88a', lineHeight: 1.5 }}>{aiData.bestTimeToVisit}</p>
                                                 </div>
                                             )}
+                                            {aiData.packingTip && (
+                                                <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(255,167,38,0.06)', border: '1px solid rgba(255,167,38,0.15)' }}>
+                                                    <p style={{ fontFamily: 'Caveat, cursive', fontWeight: 700, fontSize: '0.82rem', color: '#ffa726', marginBottom: '4px' }}>🎒 Packing Tip</p>
+                                                    <p style={{ fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.8rem', color: '#b8a88a', lineHeight: 1.5 }}>{aiData.packingTip}</p>
+                                                </div>
+                                            )}
+                                            {aiData.moodColor && (
+                                                <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: aiData.moodColor, flexShrink: 0, boxShadow: `0 0 12px ${aiData.moodColor}66` }} />
+                                                    <div>
+                                                        <p style={{ fontFamily: 'Caveat, cursive', fontWeight: 700, fontSize: '0.82rem', color: '#f0e6d0', marginBottom: '2px' }}>🎨 Memory Color</p>
+                                                        <p style={{ fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.78rem', color: '#7a6f5a' }}>{aiData.moodColor}</p>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
+
+                                        {/* Travel Quote */}
+                                        {aiData.travelQuote && (
+                                            <div style={{
+                                                padding: '14px 18px', borderRadius: '14px',
+                                                background: `linear-gradient(135deg, rgba(212,160,23,0.08), rgba(179,136,255,0.05))`,
+                                                border: '1.5px solid rgba(212,160,23,0.2)',
+                                                textAlign: 'center',
+                                            }}>
+                                                <p style={{ fontFamily: 'Caveat, cursive', fontSize: '1.05rem', color: '#f5d56e', lineHeight: 1.6, fontStyle: 'italic' }}>
+                                                    &ldquo;{aiData.travelQuote}&rdquo;
+                                                </p>
+                                            </div>
+                                        )}
 
                                         {aiData.memoryPrompt && (
                                             <div style={{

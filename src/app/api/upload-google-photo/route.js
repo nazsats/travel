@@ -1,5 +1,32 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]/route";
+import { db } from "@/lib/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+
+const STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+
+// Upload a buffer to Firebase Storage via REST and return the public download URL
+async function uploadToFirebaseStorage(buffer, filename, mimeType) {
+    const encodedName = encodeURIComponent(`travel-photos/${Date.now()}_${filename}`);
+    const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o?name=${encodedName}&uploadType=media&key=${FIREBASE_API_KEY}`;
+
+    const res = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": mimeType },
+        body: buffer,
+    });
+
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Firebase Storage upload failed: ${err}`);
+    }
+
+    const data = await res.json();
+    // Build the permanent public download URL
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${STORAGE_BUCKET}/o/${encodeURIComponent(data.name)}?alt=media&token=${data.downloadTokens}`;
+    return downloadUrl;
+}
 
 export async function POST(req) {
     try {
@@ -10,7 +37,7 @@ export async function POST(req) {
 
         const formData = await req.formData();
         const file = formData.get("file");
-        const albumMode = formData.get("albumMode") || "none";  // "new" | "none" | <albumId>
+        const albumMode = formData.get("albumMode") || "none";
         const albumTitle = formData.get("albumTitle") || "My Trip";
         const albumId = formData.get("albumId") || null;
 
@@ -20,7 +47,17 @@ export async function POST(req) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        /* ── 1. Upload raw bytes ─────────────────────── */
+        /* ── 1. Upload to Firebase Storage (permanent URL) ── */
+        let firebaseUrl = null;
+        try {
+            firebaseUrl = await uploadToFirebaseStorage(buffer, file.name, file.type);
+            console.log("✅ Saved to Firebase Storage:", firebaseUrl.substring(0, 80) + "...");
+        } catch (storageErr) {
+            console.error("Firebase Storage error:", storageErr.message);
+            // Continue — still try to upload to Google Photos
+        }
+
+        /* ── 2. Upload raw bytes to Google Photos ──────────── */
         const uploadRes = await fetch("https://photoslibrary.googleapis.com/v1/uploads", {
             method: "POST",
             headers: {
@@ -35,16 +72,21 @@ export async function POST(req) {
         if (!uploadRes.ok) {
             const errText = await uploadRes.text();
             console.error("Failed to upload bytes:", errText);
+            // If we have a Firebase URL, still save to Firestore and return success
+            if (firebaseUrl) {
+                await saveToFirestore({ firebaseUrl, filename: file.name, mimeType: file.type, albumId: null, albumTitle: null, session });
+                return Response.json({ success: true, firebaseOnly: true });
+            }
             return Response.json({ error: "Failed to upload bytes to Google Photos" }, { status: uploadRes.status });
         }
 
         const uploadToken = await uploadRes.text();
 
-        /* ── 2. Resolve album ID ─────────────────────── */
+        /* ── 3. Resolve album ──────────────────────────────── */
         let resolvedAlbumId = null;
+        let resolvedAlbumTitle = null;
 
         if (albumMode === "new") {
-            // Create a new album
             const createAlbumRes = await fetch("https://photoslibrary.googleapis.com/v1/albums", {
                 method: "POST",
                 headers: {
@@ -56,24 +98,21 @@ export async function POST(req) {
             if (createAlbumRes.ok) {
                 const albumData = await createAlbumRes.json();
                 resolvedAlbumId = albumData.id;
-            } else {
-                // Don't fail — just upload without album
-                console.warn("Could not create album, uploading without.");
+                resolvedAlbumTitle = albumTitle;
             }
         } else if (albumMode !== "none" && albumId) {
             resolvedAlbumId = albumId;
+            resolvedAlbumTitle = albumTitle;
         }
 
-        /* ── 3. Create media item (optionally in album) ─ */
+        /* ── 4. Create media item in Google Photos ─────────── */
         const body = {
             newMediaItems: [{
                 description: "Uploaded from Travel Memories",
-                simpleMediaItem: { uploadToken },
+                simpleMediaItem: { uploadToken, fileName: file.name },
             }],
         };
-        if (resolvedAlbumId) {
-            body.albumId = resolvedAlbumId;
-        }
+        if (resolvedAlbumId) body.albumId = resolvedAlbumId;
 
         const createRes = await fetch("https://photoslibrary.googleapis.com/v1/mediaItems:batchCreate", {
             method: "POST",
@@ -85,19 +124,50 @@ export async function POST(req) {
         });
 
         const result = await createRes.json();
-        if (!createRes.ok) {
-            console.error("Failed to create media item:", result);
-            return Response.json({ error: "Failed to create media item" }, { status: createRes.status });
-        }
+        const mediaItem = result.newMediaItemResults?.[0]?.mediaItem;
+
+        /* ── 5. Save to Firestore ──────────────────────────── */
+        await saveToFirestore({
+            firebaseUrl,
+            filename: file.name,
+            mimeType: file.type,
+            albumId: resolvedAlbumId,
+            albumTitle: resolvedAlbumTitle,
+            googlePhotosId: mediaItem?.id || null,
+            googleProductUrl: mediaItem?.productUrl || null,
+            session,
+        });
 
         return Response.json({
             success: true,
-            result,
             albumId: resolvedAlbumId,
+            firebaseUrl,
         });
 
     } catch (error) {
         console.error("Upload error:", error);
         return Response.json({ error: "Internal Server Error" }, { status: 500 });
+    }
+}
+
+async function saveToFirestore({ firebaseUrl, filename, mimeType, albumId, albumTitle, googlePhotosId, googleProductUrl, session }) {
+    try {
+        const doc = {
+            filename: filename || null,
+            mimeType: mimeType || null,
+            albumId: albumId || null,
+            albumTitle: albumTitle || null,
+            uploadedBy: session.user?.email || null,
+            createdAt: serverTimestamp(),
+        };
+        // Only add fields that are defined
+        if (firebaseUrl) doc.firebaseUrl = firebaseUrl;
+        if (googlePhotosId) doc.googlePhotosId = googlePhotosId;
+        if (googleProductUrl) doc.googleProductUrl = googleProductUrl;
+
+        await addDoc(collection(db, "google_photos"), doc);
+        console.log("✅ Saved to Firestore");
+    } catch (err) {
+        console.error("Could not save to Firestore:", err.message);
     }
 }

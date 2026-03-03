@@ -1,70 +1,68 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req) {
     try {
         const body = await req.json();
-        const { title, location, country, category, mood, description, companions, highlights } = body;
+        const { title, location, country, category, mood, description, companions, highlights, foodTried, localTips, rating } = body;
 
-        const prompt = `You are a creative and fun travel companion AI. A traveler is logging a memory about their trip. Based on the details below, generate an enriched, entertaining, and informative response.
+        const prompt = `You are a world-class travel storyteller and cultural expert AI. A traveler is logging a memory. Make it magical.
 
-TRIP DETAILS:
+MEMORY DETAILS:
 - Title: ${title || "A travel memory"}
-- Location: ${location || "Unknown"}
-- Country: ${country || "Unknown"}
+- Location: ${location || "Unknown"}, ${country || "Unknown"}
 - Category: ${category || "General"}
-- Mood: ${mood || "Happy"}
-- Their Description: ${description || "No description yet"}
+- Mood: ${mood || "Happy"} | Rating: ${rating || "5"}/5
+- Description: ${description || "No description yet"}
 - Companions: ${companions || "Solo"}
-- Highlights: ${highlights || "None mentioned"}
+- Highlights: ${highlights || "None"}
+- Food tried: ${foodTried || "None mentioned"}
+- Local tips noted: ${localTips || "None"}
 
-Please respond with a JSON object containing these fields:
+Return ONLY a valid JSON object (no markdown, no text outside JSON):
 {
-  "enhancedDescription": "A vivid, poetic 2-3 sentence version of their memory that captures the magic of the moment. Make it personal and emotional.",
-  "funFacts": ["3 fascinating and lesser-known fun facts about this location or country"],
-  "travelTips": ["3 practical insider tips for anyone visiting this place"],
-  "localCuisine": ["3 must-try local dishes or drinks at this destination with brief descriptions"],
-  "bestTimeToVisit": "One sentence about the ideal time to visit this place and why",
-  "packingTip": "One fun and specific packing suggestion for this destination",
-  "localPhrase": "A useful local phrase in the native language with translation and pronunciation",
-  "hiddenGem": "One hidden gem or secret spot near this location that most tourists miss",
-  "soundtrack": "A song that perfectly captures the vibe of this destination with artist name",
-  "memoryPrompt": "A creative question or prompt to help them remember more details about this trip"
-}
-
-IMPORTANT: Return ONLY valid JSON, no markdown or extra text.`;
+  "enhancedDescription": "A vivid, emotional 3-sentence travel diary entry written in first person. Capture sensory details: sights, sounds, smells, feelings. Make it feel like a bestselling travel memoir.",
+  "funFacts": ["3 surprising, specific facts about this exact location or country that most people don't know"],
+  "travelTips": ["3 hyper-practical, insider tips specific to this destination — things only locals know"],
+  "localCuisine": ["3 must-try dishes/drinks at this destination with a rich description of each — textures, flavors, where to find them"],
+  "bestTimeToVisit": "One sentence about the perfect season to visit and exactly why",
+  "packingTip": "One specific, clever packing suggestion uniquely relevant to this destination",
+  "localPhrase": "One essential local phrase — include the phrase, language, romanized pronunciation, and English meaning",
+  "hiddenGem": "One ultra-specific hidden gem or secret experience nearby that 99% of tourists miss",
+  "soundtrack": "One perfect song that captures this destination's spirit — include artist, song title, and why it fits",
+  "memoryPrompt": "One creative, introspective question to help them unlock deeper memories of this trip",
+  "moodColor": "A single hex color that represents the mood of this memory (e.g. #FFB347 for a warm sunset)",
+  "travelQuote": "A famous or poetic quote about travel that perfectly fits this destination or experience"
+}`;
 
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4o",
             messages: [
-                { role: "system", content: "You are a creative travel AI that returns only valid JSON. Always respond with rich, entertaining, and accurate travel information." },
+                {
+                    role: "system",
+                    content: "You are a world-class travel writer and cultural expert. You create rich, accurate, poetic travel content. Always return only valid JSON.",
+                },
                 { role: "user", content: prompt },
             ],
-            temperature: 0.85,
-            max_tokens: 1200,
+            temperature: 0.88,
+            max_tokens: 1600,
+            response_format: { type: "json_object" },
         });
 
         const text = completion.choices[0]?.message?.content || "{}";
-
-        // Try to parse the JSON response
         let parsed;
         try {
-            // Remove potential markdown code block wrapping
+            parsed = JSON.parse(text);
+        } catch {
             const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
             parsed = JSON.parse(cleaned);
-        } catch {
-            parsed = { enhancedDescription: text, funFacts: [], travelTips: [], localCuisine: [] };
         }
 
         return Response.json({ success: true, data: parsed });
+
     } catch (error) {
         console.error("AI enhance error:", error);
-        return Response.json(
-            { error: error.message || "AI enhancement failed" },
-            { status: 500 }
-        );
+        return Response.json({ error: error.message || "AI enhancement failed" }, { status: 500 });
     }
 }
