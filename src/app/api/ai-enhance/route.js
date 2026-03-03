@@ -28,7 +28,7 @@ Return ONLY a valid JSON object (no markdown, no text outside JSON):
   "localCuisine": ["3 must-try dishes/drinks at this destination with a rich description of each — textures, flavors, where to find them"],
   "bestTimeToVisit": "One sentence about the perfect season to visit and exactly why",
   "packingTip": "One specific, clever packing suggestion uniquely relevant to this destination",
-  "localPhrase": "One essential local phrase — include the phrase, language, romanized pronunciation, and English meaning",
+  "localPhrase": "One essential local phrase as a plain string in this exact format: \"[phrase]\" ([language]) — [romanized pronunciation] — [English meaning]",
   "hiddenGem": "One ultra-specific hidden gem or secret experience nearby that 99% of tourists miss",
   "soundtrack": "One perfect song that captures this destination's spirit — include artist, song title, and why it fits",
   "memoryPrompt": "One creative, introspective question to help them unlock deeper memories of this trip",
