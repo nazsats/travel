@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, orderBy, query, deleteDoc, doc } from 'firebase/firestore';
 import { Plus, Globe, MapPin, Camera, Zap } from 'lucide-react';
@@ -9,6 +10,9 @@ import { MemoryCard } from '@/components/MemoryCard';
 import { ChallengeTracker, ChallengeModal } from '@/components/ChallengeTracker';
 import { GooglePhotosUploader } from '@/components/GooglePhotosUploader';
 import { GooglePhotosGallery } from '@/components/GooglePhotosGallery';
+
+// SSR-safe import — Leaflet only runs in the browser
+const TravelMap = dynamic(() => import('@/components/TravelMap'), { ssr: false });
 
 const categoryConfig = {
   'Sightseeing': { color: '#5c8aff', emoji: '🗺️' },
@@ -164,6 +168,7 @@ export default function Home() {
         <div style={{ display: 'flex', gap: '4px', marginBottom: '28px', padding: '4px', borderRadius: '14px', background: '#111118', border: '1px solid #2a2a38' }}>
           {[
             { key: 'memories', label: '📖 Memories' },
+            { key: 'map', label: '🗺️ Map' },
             { key: 'challenges', label: '🏆 Challenges' },
             { key: 'photos', label: '📷 Photos' },
           ].map(tab => (
@@ -178,6 +183,28 @@ export default function Home() {
             }}>{tab.label}</button>
           ))}
         </div>
+
+        {/* ── Map Tab ──────────────────────────────────────── */}
+        {activeTab === 'map' && (
+          <div style={{ animation: 'fadeIn .4s ease-out' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+              <div>
+                <h2 style={{ fontFamily: 'Caveat, cursive', fontWeight: 700, fontSize: '1.6rem', color: '#f0e6d0' }}>
+                  🌍 World Map
+                </h2>
+                <p style={{ fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.84rem', color: '#7a6f5a', marginTop: '2px' }}>
+                  {memories.length} memor{memories.length !== 1 ? 'ies' : 'y'} across {countries.length} countr{countries.length !== 1 ? 'ies' : 'y'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ padding: '4px 12px', borderRadius: '999px', border: '1px solid rgba(212,160,23,0.3)', background: 'rgba(212,160,23,0.06)', fontFamily: 'Patrick Hand, sans-serif', fontSize: '0.78rem', color: '#7a6f5a' }}>
+                  🖱️ Click a pin to see details
+                </span>
+              </div>
+            </div>
+            <TravelMap memories={memories} />
+          </div>
+        )}
 
         {/* ── Challenges Tab ────────────────────────────────── */}
         {activeTab === 'challenges' && (
